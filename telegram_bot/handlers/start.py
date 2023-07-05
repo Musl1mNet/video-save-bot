@@ -1,5 +1,5 @@
 import json
-import html_to_json
+from bs4 import BeautifulSoup
 import requests
 from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
@@ -8,7 +8,7 @@ from instagram_downloader.methods import download
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text(text="Xush kelibsiz {}\n botimizdan foydalanish uchun instagramdan link jo'nating!".format(update.effective_user.first_name))
+    await update.effective_message.reply_text(text="Xush kelibsiz {}\nbotimizdan foydalanish uchun instagramdan link jo'nating!".format(update.effective_user.first_name))
 
 
 async def download_images_or_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -18,28 +18,26 @@ async def download_images_or_video(update: Update, context: ContextTypes.DEFAULT
         if msg.find("instagram"):
             url = msg
         else:
-            text = "Iltimos instagramdagi postning linklarini jo'nating\n boshqa saytni hozircha qo'llab quvvatlamaymiz"
+            text = "Iltimos instagramdagi postning linklarini jo'nating\nboshqa saytni hozircha qo'llab quvvatlamaymiz"
             await update.edited_message.reply_text(text=text)
         response = requests.get(url)
-        r = html_to_json.convert(response.text)
-        resp = r["html"][0]["head"][0]["script"][0]["_value"]
-        resp = json.loads(resp)
-        if resp.get("video", False):
-            for item in resp["video"]:
-                vurl = item.get("contentUrl")
-                if vurl:
+        soup = BeautifulSoup(response.content, "html.parser")
+        soup = soup.find_all("script", type="application/ld+json")
+
+        if soup:
+            resp = json.loads(soup[0].text)
+            if resp.get("video", False):
+                for item in resp["video"]:
+                    vurl = item.get("contentUrl")
                     await download(vurl, update)
-                else:
-                    text = "So‘rov bajarilmadi. Hisob shaxsiy emasligiga ishonch hosil qiling. \nAgar u ommaviy bo‘lsa, qayta urinib ko‘ring."
-                    await update.effective_message.reply_text(text)
-        elif resp.get("image", False):
-            for item in resp["image"]:
-                vurl = item.get("url")
-                if vurl:
+            elif resp.get("image", False):
+                for item in resp["image"]:
+                    vurl = item.get("url")
                     await download(vurl, update)
-                else:
-                    text = "So‘rov bajarilmadi. Hisob shaxsiy emasligiga ishonch hosil qiling. \nAgar u ommaviy bo‘lsa, qayta urinib ko‘ring."
-                    await update.effective_message.reply_text(text)
+        else:
+            text = "So‘rov bajarilmadi. Hisob shaxsiy emasligiga ishonch hosil qiling. \nAgar u ommaviy bo‘lsa, qayta urinib ko‘ring."
+            await update.effective_message.reply_text(text)
+
     else:
         await update.effective_message.reply_text(text="Iltimos tekshirib qaytadan jo'nating\nLink ligiga ishinch hosil qiling")
 
